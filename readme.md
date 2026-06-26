@@ -210,5 +210,6 @@ Bu sinyaller, kapı hareketinin güvenli ve kontrollü şekilde yönetilmesini s
 ## Yazar
 
 **Hüseyin Yanar**
+
 Elektrik-Elektronik Mühendisi  
 

@@ -105,6 +105,13 @@ Desteklenen harici bağlantılar:
 
 Kart, ana kontrol kartından gelen PWM ve yön kontrol sinyallerini alır, motoru H-bridge yapısı üzerinden çift yönde sürer ve motorun akım/gerilim bilgilerini ana karta geri bildirir.
 
+
+### Motor Control Board Schematic
+
+Aşağıdaki şematik; güç ve sinyal girişleri, giriş koruma/filtreleme, IR2103 MOSFET driver devreleri, N-channel MOSFET H-bridge güç katı, 3.3 V lojik regülatör, motor akım algılama ve motor gerilim algılama bloklarını tek sayfada göstermektedir.
+
+![Motor Control Board Schematic](Images/Motor_Control_Board_Schematic.png)
+
 ### Motor Driver Topology
 
 Motor sürüş katı, **4 adet N-channel MOSFET** ile oluşturulmuş high-side / low-side **H-bridge** yapısına sahiptir. MOSFET'ler iki adet half-bridge MOSFET driver ile sürülür.
@@ -215,6 +222,7 @@ Motor kontrol kartı **2-layer PCB** olarak tasarlanmıştır. Kart üzerinde mo
 │   ├── MCU.SchDoc
 │   ├── External_Hardware.SchDoc
 │   ├── Chicken_Coop_Door_Motor_Control_Board.PrjPcb
+│   ├── Chicken_Coop_Door_Motor_Control_Board.PrjPcbStructure
 │   ├── Chicken_Coop_Door_Motor_Control_Board.PcbDoc
 │   └── Motor Control.SchDoc
 │
@@ -222,6 +230,7 @@ Motor kontrol kartı **2-layer PCB** olarak tasarlanmıştır. Kart üzerinde mo
 │   ├── PowerSchematic.png
 │   ├── MCU_Schematic.png
 │   ├── External_Hardware_Schematic.png
+│   ├── Motor_Control_Board_Schematic.png
 │   ├── PCB_Top_View.png
 │   ├── PCB_Bottom_View.png
 │   ├── Motor_Control_Board_3D_Top.png

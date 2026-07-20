@@ -2,7 +2,7 @@
 
 Bu sunum, **STM32F103C8T6 tabanlı otomatik tavuk kümesi kapısı kontrol sistemi** için hazırlanmış donanım tasarım dosyalarını içerir.
 
-Sistem; Li-ion pil paketi ile beslenen ana kontrol kartı ve bu karta bağlı ayrı bir motor kontrol kartından oluşur. Ana kontrol kartı; kapı konumunu limit switch ile takip eder, IR sensör ile varlık algılar, TFT ekran, panel LED'leri ve panel butonları üzerinden kullanıcı arayüzünü yönetir. Motor kontrol kartı ise ana karttan gelen PWM/yön kontrol sinyalleriyle 12 V DC motoru sürer ve motor akım/gerilim geri bildirimlerini ana karta gönderir.
+Sistem; Li-ion pil paketi ile beslenen ana kontrol kartı ve fırçalı DC motoru süren motor kontrol kartından oluşur. Ana kontrol kartı; kapı konumunu limit switch ile takip eder, IR sensör ile varlık algılar, TFT ekran, panel LED'leri ve panel butonları üzerinden kullanıcı arayüzünü yönetir. Motor kontrol kartı ise ana karttan gelen PWM/yön kontrol sinyalleriyle 12 V DC motoru sürer ve motor akım/gerilim geri bildirimlerini ana karta gönderir.
 
 > Bu sunum ağırlıklı olarak PCB donanım tasarım dosyalarını içerir. Firmware/yazılım geliştirmesi buraya dahil değildir.
 
@@ -22,7 +22,6 @@ Sistemde bulunan temel donanımlar:
 - **Harici 32.768 kHz LSE kristal**
 - **TFT ekran arayüzü**
 - **Motor PWM ve yön kontrol çıkışları**
-- **Automatic Door Motor Control Board arayüzü**
 - **12 V DC worm gear motor sürüş katı**
 - **Motor akım geri bildirimi**
 - **Motor gerilim geri bildirimi**
@@ -99,18 +98,50 @@ Desteklenen harici bağlantılar:
 
 ---
 
-## Automatic Door Motor Control Board
+### Motor Control Board 
 
-**Automatic Door Motor Control Board**, otomatik kapı mekanizmasında kullanılan **12 V DC worm gear motoru** sürmek için tasarlanmış ayrı bir güç ve motor sürücü kartıdır.
+Motor Control Board, 12 V fırçalı DC motorun çift yönlü ve PWM kontrollü sürülmesi için ana kontrol kartından ayrı bir güç kartı olarak tasarlanmıştır. Kart yaklaşık **60 mm x 53 mm** boyutundadır ve dört adet montaj deliğine sahiptir.
 
-Kart, ana kontrol kartından gelen PWM ve yön kontrol sinyallerini alır, motoru H-bridge yapısı üzerinden çift yönde sürer ve motorun akım/gerilim bilgilerini ana karta geri bildirir.
+Kartın temel bölümleri:
 
+- Girişte resetlenebilir PTC sigorta, seri Schottky diyot ve SMBJ15CA TVS koruması
+- 330 uF bulk kapasitör ile giriş filtreleme
+- İki adet IR2103 yarım-köprü gate driver
+- İki adet PJL9850 çift N-kanal MOSFET ile oluşturulan tam H-köprü
+- Motorun çift yönlü sürülmesi ve PWM ile hız kontrolü
+- 5 mOhm şönt direnç ve MCP6001 op-amp ile motor akım ölçümü
+- Motorun iki terminali için gerilim bölücü, RC filtre ve MCP6001 buffer devreleri
+- Ölçüm devreleri için filtrelenmiş 3.3 V analog besleme
+- Ana kontrol kartına üç analog geri bildirim çıkışı
 
-### Motor Control Board Schematic
+#### Motor Kontrol Sinyalleri
 
-Aşağıdaki şematik; güç ve sinyal girişleri, giriş koruma/filtreleme, IR2103 MOSFET driver devreleri, N-channel MOSFET H-bridge güç katı, 3.3 V lojik regülatör, motor akım algılama ve motor gerilim algılama bloklarını tek sayfada göstermektedir.
+| Sinyal | Açıklama |
+| --- | --- |
+| `Motor_PWM_A` | A yarım-köprüsü PWM kontrolü |
+| `Motor_PWM_B` | B yarım-köprüsü PWM kontrolü |
+| `Motor_INA` | A yarım-köprüsü yön/alt anahtar kontrolü |
+| `Motor_INB` | B yarım-köprüsü yön/alt anahtar kontrolü |
 
-![Motor Control Board Schematic](Images/Motor_Control_Board_Schematic.png)
+#### Ölçüm ve Geri Bildirim Sinyalleri
+
+| Sinyal | Açıklama |
+| --- | --- |
+| `MOTOR_CURRENT` | Şönt direnç üzerinden yükseltilmiş motor akım ölçümü |
+| `MOTOR_VREF_A` | Motorun A terminaline ait ölçeklendirilmiş gerilim |
+| `MOTOR_VREF_B` | Motorun B terminaline ait ölçeklendirilmiş gerilim |
+
+Bu geri bildirimler, yazılım tarafında motor akımının izlenmesi, sıkışma/stall durumunun belirlenmesi ve motor uç gerilimlerinden hareket bilgisinin değerlendirilmesi için kullanılacaktır.
+
+#### Motor Güç ve Sürücü Şematiği
+
+![Motor Control Board V2 Power and Driver Schematic](Images/Motor_Control_Board_Power_And_Driver_Schematic.png)
+
+#### Motor Ölçüm Şematiği
+
+![Motor Control Board V2 Motor Measure Schematic](Images/Motor_Control_Board_Motor_Measure_Schematic.png)
+
+---
 
 ### Motor Driver Topology
 
@@ -151,12 +182,16 @@ Bu geri bildirim aşağıdaki amaçlarla kullanılabilir:
 
 ### Motor Voltage Sensing
 
-Motorun iki terminali, gerilim bölücü devreleri üzerinden ayrı ayrı ölçülür. Bu sayede ana kart, motorun iki ucu arasındaki gerilimi hesaplayabilir.
+Motorun her iki terminali (`HB_A_SWITCH` ve `HB_B_SWITCH`) ayrı ayrı ölçülmektedir. Terminal gerilimleri, 75 kΩ / 15 kΩ gerilim bölücüler ile yaklaşık **1/6 oranında düşürülerek** `MOTOR_VSENSE_A` ve `MOTOR_VSENSE_B` sinyallerine dönüştürülür.
+
+Bu sinyaller, 1 kΩ direnç ve 47 nF kondansatörden oluşan giriş filtresinden geçirildikten sonra MCP6001 op-amp'ları tarafından gerilim takipçisi (unity-gain buffer) olarak tamponlanır. Böylece gerilim bölücü devresi ADC girişinden izole edilir ve ana karta daha kararlı, düşük empedanslı ölçüm sinyalleri iletilir.
 
 Motor gerilim geri bildirim sinyalleri:
 
-- `MOTOR_VSENSE_A`
-- `MOTOR_VSENSE_B`
+- `MOTOR_VREF_A`
+- `MOTOR_VREF_B`
+
+Ana kart, bu iki geri bildirim sinyali arasındaki farkı kullanarak motor uçları arasındaki gerçek gerilimi hesaplayabilir.
 
 Motor akım geri bildirim sinyali:
 
@@ -172,25 +207,14 @@ Motor kontrol kartı ana karta aşağıdaki sinyaller üzerinden bağlanır:
 | `Motor_INA` | Main Board → Motor Control Board | A yönü enable/direction kontrol sinyali |
 | `Motor_PWM_B` | Main Board → Motor Control Board | B yönü PWM kontrol sinyali |
 | `Motor_INB` | Main Board → Motor Control Board | B yönü enable/direction kontrol sinyali |
-| `MOTOR_VSENSE_A` | Motor Control Board → Main Board | Motor A terminali gerilim geri bildirimi |
-| `MOTOR_VSENSE_B` | Motor Control Board → Main Board | Motor B terminali gerilim geri bildirimi |
+| `MOTOR_VREF_A` | Motor Control Board → Main Board | Motor A terminali gerilim geri bildirimi |
+| `MOTOR_VREF_B` | Motor Control Board → Main Board | Motor B terminali gerilim geri bildirimi |
 | `MOTOR_CURRENT` | Motor Control Board → Main Board | Motor akım geri bildirimi |
 
-### Key Components
-
-| Blok | Kullanılan Eleman |
-|---|---|
-| MOSFET Driver | IR2103STRPBF half-bridge MOSFET driver |
-| Power MOSFET | PJL9850 N-channel MOSFET |
-| Current Sense Amplifier | MCP6001T-I/OT op-amp |
-| Input Fuse | FSMD200-24-2920-R resettable PTC fuse |
-| Reverse Protection | SS33-E3/57T Schottky diode |
-| TVS Protection | SMBJ15CA-TR TVS diode |
-| Logic Regulator | L78L33ABUTR 3.3 V LDO |
 
 ### PCB Design
 
-Motor kontrol kartı **2-layer PCB** olarak tasarlanmıştır. Kart üzerinde motor akımı taşıyan güç yolları geniş tutulmuş, GND dönüş yolu için polygon pour ve via stitching yapısı kullanılmıştır. Motor akımı, motor gerilimi ve sürücü kontrol sinyalleri ayrı izleme/geri bildirim hatları olarak ana karta taşınır.
+Motor kontrol kartı **2-layer PCB** olarak tasarlanmıştır. Kart üzerinde motor akımı taşıyan güç yolları geniş tutulmuş, GND dönüş yolu için polygon pour yapısı kullanılmıştır. Motor akımı, motor gerilimi ve sürücü kontrol sinyalleri ayrı izleme/geri bildirim hatları olarak ana karta taşınır.
 
 ---
 
@@ -221,23 +245,25 @@ Motor kontrol kartı **2-layer PCB** olarak tasarlanmıştır. Kart üzerinde mo
 │   ├── Power.SchDoc
 │   ├── MCU.SchDoc
 │   ├── External_Hardware.SchDoc
-│   ├── Chicken_Coop_Door_Motor_Control_Board.PrjPcb
-│   ├── Chicken_Coop_Door_Motor_Control_Board.PrjPcbStructure
-│   ├── Chicken_Coop_Door_Motor_Control_Board.PcbDoc
-│   └── Motor Control.SchDoc
+│   ├── Chicken_Coop_Door_Motor_Control_Board_V2.PrjPcb
+│   ├── Chicken_Coop_Door_Motor_Control_Board_V2.PrjPcbStructure
+│   ├── Chicken_Coop_Door_Motor_Control_Board_V2.PcbDoc
+│   └── Power_And_Driver.SchDoc
+│   └── Motor_Measure.SchDoc
 │
 ├── Images/
-│   ├── PowerSchematic.png
+│   ├── Power.png
 │   ├── MCU_Schematic.png
 │   ├── External_Hardware_Schematic.png
-│   ├── Motor_Control_Board_Schematic.png
+│   ├── Motor_Control_Board_Power_And_Driver_Schematic.png
+│   ├── Motor_Control_Board_Motor_Measure_Schematic.png
 │   ├── PCB_Top_View.png
 │   ├── PCB_Bottom_View.png
 │   ├── Motor_Control_Board_3D_Top.png
 │
 ├── Production/
 │   ├── Bill of Materials-Chicken_Coop_Door_Main_Board_V3.xlsx
-│   └── Bill of Materials-Chicken_Coop_Door_Motor_Control_Board.xlsx
+│   └── Bill of Materials-Chicken_Coop_Door_Motor_Control_Board_V2.xlsx
 │
 └── README.md
 ```
@@ -258,9 +284,10 @@ Sunumda bulunan temel Altium dosyaları:
 | `MCU.SchDoc` | Mikrodenetleyici devresi şematik dosyası |
 | `External_Hardware.SchDoc` | Harici donanım arayüzleri şematik dosyası |
 | `Chicken_Coop_Door_Main_Board_V3.PrjPcbStructure` | Ana kontrol kartı Altium proje yapı dosyası |
-| `Chicken_Coop_Door_Motor_Control_Board.PrjPcb` | Motor kontrol kartı Altium PCB proje dosyası |
-| `Chicken_Coop_Door_Motor_Control_Board.PcbDoc` | Motor kontrol kartı PCB layout dosyası |
-| `Motor Control.SchDoc` | Motor kontrol kartı şematik dosyası |
+| `Chicken_Coop_Door_Motor_Control_Board_V2.PrjPcb` | Motor kontrol kartı Altium PCB proje dosyası |
+| `Chicken_Coop_Door_Motor_Control_Board_V2.PcbDoc` | Motor kontrol kartı PCB layout dosyası |
+| `Power_And_Driver.SchDoc` | Motor kontrol kartı şematik dosyası |
+| `Motor_Measure.SchDoc` | Motor kontrol kartı şematik dosyası |
 
 ---
 
@@ -270,7 +297,7 @@ BOM dosyaları `Production` klasörü altında yer almaktadır:
 
 ```text
 Production/Bill of Materials-Chicken_Coop_Door_Main_Board_V3.xlsx
-Production/Bill of Materials-Chicken_Coop_Door_Motor_Control_Board.xlsx
+Production/Bill of Materials-Chicken_Coop_Door_Motor_Control_Board_v2.xlsx
 ```
 
 Bu dosyalar, projede kullanılan komponentleri, değerleri, üretici bilgilerini ve footprint bilgilerini içerir.

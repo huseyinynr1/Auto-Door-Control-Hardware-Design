@@ -2,7 +2,7 @@
 
 Bu sunum, **STM32F103C8T6 tabanlı otomatik tavuk kümesi kapısı kontrol sistemi** için hazırlanmış donanım tasarım dosyalarını içerir.
 
-Sistem; Li-ion pil paketi ile beslenen ana kontrol kartı ve fırçalı DC motoru süren motor kontrol kartından oluşur. Ana kontrol kartı; kapı konumunu limit switch ile takip eder, IR sensör ile varlık algılar, TFT ekran, panel LED'leri ve panel butonları üzerinden kullanıcı arayüzünü yönetir. Motor kontrol kartı ise ana karttan gelen PWM/yön kontrol sinyalleriyle 12 V DC motoru sürer ve motor akım/gerilim geri bildirimlerini ana karta gönderir.
+Sistem; Li-ion pil paketi ile beslenen ana kontrol kartı ve fırçalı DC motoru süren motor kontrol kartından oluşur. Ana kontrol kartı; kapı konumunu limit switch ile takip eder, IR sensör ile varlık algılar, pil gerilimini ADC üzerinden izler, TFT ekran, panel LED'leri ve panel butonları üzerinden kullanıcı arayüzünü yönetir. Motor kontrol kartı ise ana karttan gelen PWM/yön kontrol sinyalleriyle 12 V DC motoru sürer ve motor akım/gerilim geri bildirimlerini ana karta gönderir.
 
 > Bu sunum ağırlıklı olarak PCB donanım tasarım dosyalarını içerir. Firmware/yazılım geliştirmesi buraya dahil değildir.
 
@@ -55,7 +55,11 @@ Kartın ana beslemesi Li-ion pil paketidir. Giriş gerilimi önce buck converter
 | 5 V | Buck converter | Sensör/periferik beslemesi |
 | 3.3 V | LDO regülatör | MCU ve lojik devre beslemesi |
 
-Güç bölümünde giriş filtreleme, koruma elemanları ve regüle çıkış devreleri bulunmaktadır.
+Güç bölümünde giriş filtreleme, koruma elemanları, regüle çıkış devreleri ve pil gerilimi ölçüm katı bulunmaktadır.
+
+Pil gerilimi, **50 kΩ / 10 kΩ** gerilim bölücü ile yaklaşık **1/6 oranında** küçültülür. Böylece nominal **12.6 V** pil gerilimi ADC ölçüm hattında yaklaşık **2.1 V**, ölçüm üst sınırı olarak değerlendirilen **18 V** ise yaklaşık **3.0 V** seviyesine dönüştürülür.
+
+Gerilim bölücü çıkışı, **1 kΩ + 47 nF** alçak geçiren filtreden geçirilir ve **MCP6001** op-amp gerilim takipçisi ile tamponlanır. Op-amp, yüksek empedanslı gerilim bölücü düğümünü MCU ADC girişinden ayırarak `BATTERY_VOLTAGE` hattına düşük empedanslı ve daha kararlı bir ölçüm sinyali verir. Op-amp çıkışındaki **10 Ω** seri direnç, ADC hattındaki küçük kapasitif yükten op-amp çıkışını ayırır.
 
 ![Power Schematic](Images/PowerSchematic.png)
 
@@ -74,6 +78,12 @@ MCU bölümünde bulunan temel yapılar:
 - Reset / boot bağlantıları
 - SWD programlama ve debug header'ı
 - 3.3 V lojik besleme bağlantıları
+- Pil gerilimi için `BATTERY_VOLTAGE` ADC girişi
+- Motor akımı için `MOTOR_CURRENT` ADC girişi
+- Motor uç gerilimleri için `MOTOR_VSENSE_A` ve `MOTOR_VSENSE_B` ADC girişleri
+
+Motor kontrol kartından gelen op-amp tamponlu analog sinyaller, ana kart üzerinde MCU ADC kanallarına bağlanır. Her ADC girişinde, örnekleme anındaki kısa süreli akım ihtiyacını karşılamak ve yüksek frekanslı parazitleri azaltmak için MCU pinine yakın **4.7 nF** kondansatör kullanılır. Aynı yöntem `BATTERY_VOLTAGE` ölçüm girişinde de uygulanır.
+
 
 ![MCU Schematic](Images/MCU_Schematic.png)
 
@@ -92,7 +102,6 @@ Desteklenen harici bağlantılar:
 - Panel durum LED çıkışları
 - IR varlık/engel sensörü girişi
 - Kapı tam açık/tam kapalı limit switch girişi
-- Pil/düşük gerilim algılama sinyalleri
 
 ![External Hardware Schematic](Images/External_Hardware_Schematic.png)
 
@@ -310,6 +319,8 @@ Bu dosyalar, projede kullanılan komponentleri, değerleri, üretici bilgilerini
 
 Kartın ana beslemesi, seri bağlı Li-ion hücrelerden oluşan pil paketi üzerinden sağlanacak şekilde tasarlanmıştır. Pil gerilimi buck converter devresi ile 5 V seviyesine düşürülür. Ardından 5 V hattından LDO regülatör ile 3.3 V lojik besleme hattı elde edilir.
 
+Pil gerilimi ayrıca 50 kΩ / 10 kΩ bölücü, 1 kΩ + 47 nF alçak geçiren filtre ve MCP6001 buffer üzerinden `BATTERY_VOLTAGE` sinyaline dönüştürülerek MCU ADC kanalına iletilir. Böylece pil seviyesi ve düşük/aşırı gerilim durumları ayrı comparator devresi yerine yazılım tarafından izlenebilir.
+
 ### 2. MCU Kontrol Bölümü
 
 STM32F103C8T6 mikrodenetleyici aşağıdaki işlemleri yönetmek için kullanılır:
@@ -318,9 +329,9 @@ STM32F103C8T6 mikrodenetleyici aşağıdaki işlemleri yönetmek için kullanıl
 - Kullanıcı butonlarının okunması
 - TFT ekran arayüzü
 - Sensör ve limit switch girişlerinin okunması
-- Pil durumunun takip edilmesi
-- Panel LED çıkışlarının kontrol edilmesi
-- Motor akım/gerilim geri bildirimlerinin değerlendirilmesi
+- `BATTERY_VOLTAGE` ADC ölçümünden pil durumunun takip edilmesi
+- Kırmızı ve yeşil panel LED çıkışlarının kontrol edilmesi
+- `MOTOR_CURRENT`, `MOTOR_VSENSE_A` ve `MOTOR_VSENSE_B` ADC geri bildirimlerinin değerlendirilmesi
 
 ### 3. Motor Kontrol Arayüzü
 
